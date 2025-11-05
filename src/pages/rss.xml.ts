@@ -2,6 +2,9 @@ import rss from "@astrojs/rss";
 import { getSortedPosts } from "@utils/content-utils";
 import { url } from "@utils/url-utils";
 import type { APIContext } from "astro";
+// Using experimental_AstroContainer to render Astro components to HTML strings
+// This is the recommended approach in Astro 5.x for rendering content outside of pages
+// See: https://docs.astro.build/en/reference/container-reference/
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import sanitizeHtml from "sanitize-html";
 import { siteConfig } from "@/config";
@@ -16,6 +19,7 @@ function stripInvalidXmlChars(str: string): string {
 
 export async function GET(context: APIContext) {
 	const blog = await getSortedPosts();
+	// Container is created once during build time for static site generation
 	const container = await AstroContainer.create();
 
 	return rss({
