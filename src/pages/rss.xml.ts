@@ -2,11 +2,12 @@ import rss from "@astrojs/rss";
 import { getSortedPosts } from "@utils/content-utils";
 import { url } from "@utils/url-utils";
 import type { APIContext } from "astro";
-import MarkdownIt from "markdown-it";
+// Using experimental_AstroContainer to render Astro components to HTML strings
+// This is the recommended approach in Astro 5.x for rendering content outside of pages
+// See: https://docs.astro.build/en/reference/container-reference/
+import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import sanitizeHtml from "sanitize-html";
 import { siteConfig } from "@/config";
-
-const parser = new MarkdownIt();
 
 function stripInvalidXmlChars(str: string): string {
 	return str.replace(
@@ -18,25 +19,29 @@ function stripInvalidXmlChars(str: string): string {
 
 export async function GET(context: APIContext) {
 	const blog = await getSortedPosts();
+	// Container is created once during build time for static site generation
+	const container = await AstroContainer.create();
 
 	return rss({
 		title: siteConfig.title,
 		description: siteConfig.subtitle || "No description",
 		site: context.site ?? "https://fuwari.vercel.app",
-		items: blog.map((post) => {
-			const content =
-				typeof post.body === "string" ? post.body : String(post.body || "");
-			const cleanedContent = stripInvalidXmlChars(content);
-			return {
-				title: post.data.title,
-				pubDate: post.data.published,
-				description: post.data.description || "",
-				link: url(`/posts/${post.slug}/`),
-				content: sanitizeHtml(parser.render(cleanedContent), {
-					allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img"]),
-				}),
-			};
-		}),
+		items: await Promise.all(
+			blog.map(async (post) => {
+				const { Content } = await post.render();
+				const content = await container.renderToString(Content);
+				const cleanedContent = stripInvalidXmlChars(content);
+				return {
+					title: post.data.title,
+					pubDate: post.data.published,
+					description: post.data.description || "",
+					link: url(`/posts/${post.slug}/`),
+					content: sanitizeHtml(cleanedContent, {
+						allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img"]),
+					}),
+				};
+			}),
+		),
 		customData: `<language>${siteConfig.lang}</language>`,
 	});
 }
